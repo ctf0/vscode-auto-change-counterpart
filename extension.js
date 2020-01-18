@@ -73,23 +73,20 @@ async function activate(context) {
                                 added = true
 
                                 if (text.length == 1 && prevRemoved.length) {
+                                    let text = document.lineAt(range.start.line).text
                                     let deletedChar = getCharByOffset(rangeOffset)
                                     // console.log('add', text, deletedChar, range)
 
                                     if (deletedChar) {
-                                        let { group } = deletedChar
-                                        let isLeft = group.direction == 'toLeft'
-                                        let isRight = group.direction == 'toRight'
-
                                         range = new vscode.Range(
                                             range.start.line,
-                                            isRight ? range.start.character + 1 : 0,
+                                            0,
                                             range.start.line,
-                                            isLeft ? range.start.character : document.lineAt(range.start.line).text.length
+                                            text.length
                                         )
 
                                         if (!range.isEmpty) {
-                                            await makeReplacement(editor, change, deletedChar, range)
+                                            await makeReplacement(editor, change, deletedChar, range, text)
                                         }
                                     }
 
@@ -132,7 +129,7 @@ const updateDocumentData = debounce(function (document) {
     let i = getDocumentIndex(document)
 
     return visibleTextEditors[i].content = document.getText()
-}, 100)
+}, 50)
 
 function getDocumentData(document) {
     return visibleTextEditors.find((e) => e.name == document.fileName)
@@ -173,42 +170,22 @@ function removeCharOffset(offset) {
 }
 
 /* replace --------------------------------------------------------------------- */
-async function makeReplacement(editor, change, deletedChar, range) {
-    let { document } = editor
-    let { text, rangeOffset } = change
+async function makeReplacement(editor, change, deletedChar, range, lineText) {
+    let { text } = change
     let { char, group } = deletedChar
-    let { direction, chars } = group
+    let { chars } = group
     let toReplace = chars[char]
     let replaceWith = chars[text]
-    let currentText = document.getText(range)
     let replaceDone = false
 
-    let moveBy
-    let res
-
-    if (direction == 'bi') {
-        moveBy = await getCharDiff(currentText, toReplace, replaceWith, direction)
-        res = currentText
-    } else {
-        let isLeft = direction == 'toLeft'
-        let lineLength = currentText.length
-        let lineOldText = getDocumentData(document)
-            .content
-            .substr(
-                isLeft ? rangeOffset - lineLength : rangeOffset,
-                lineLength + 1
-            )
-
-        moveBy = await getCharDiff(lineOldText, toReplace, char, direction)
-        res = isLeft ? lineOldText.slice(0, -1) : lineOldText.substr(1)
-    }
+    let moveBy = await getCharDiff(lineText, toReplace, replaceWith)
 
     // console.log(moveBy)
 
     await editor.edit(
         (edit) => edit.replace(
             range,
-            res.replace(new RegExp(escapeStringRegexp(toReplace), 'g'), (match) => {
+            lineText.replace(new RegExp(escapeStringRegexp(toReplace), 'g'), (match) => {
                 if (moveBy == 0 && !replaceDone) {
                     replaceDone = true
 
@@ -225,52 +202,26 @@ async function makeReplacement(editor, change, deletedChar, range) {
     )
 }
 
-async function getCharDiff(txt, lookFor, replacement, direction) {
+async function getCharDiff(txt, lookFor, replacement) {
     return new Promise((resolve) => {
         let count = 0
-        let other = 0
-        let me = 0
-        let regex = `${escapeStringRegexp(lookFor)}|${escapeStringRegexp(replacement)}`
+        let arr = txt.match(
+            new RegExp(`${escapeStringRegexp(lookFor)}|${escapeStringRegexp(replacement)}`, 'g')
+        )
 
-        if (direction == 'toLeft') {
-            txt.replace(new RegExp(regex, 'g'), (match) => {
-                match == lookFor
-                    ? other++
-                    : me++
-            })
+        for (let i = 0; i < arr.length; i++) {
+            const me = arr[i]
 
-            count = other - me
-        } else if (direction == 'toRight') {
-            txt.replace(new RegExp(regex, 'g'), (match) => {
-                match == replacement
-                    ? me++
-                    : other++
-            })
-
-            if (me == 1 && other >= 1) { // have more or same amount of other ex.(....))
-                count = 0
-            }
-
-            if (me == other) { // the same amount ex.((...)), so we probably on the edge
-                count = other - 1
-            }
-        } else {
-            let arr = txt.match(new RegExp(regex, 'g'))
-
-            for (let i = 0; i < arr.length; i++) {
-                const me = arr[i]
-
-                if (me == replacement) {
-                    if (i <= 1) { // first or second
-                        count = 0
-                    } else if (i == arr.length - 2) { // before last
-                        count = i
-                    } else if (i == arr.length - 1) { // last
-                        count = i - 1
-                    }
-
-                    break
+            if (me == replacement) {
+                if (i <= 1) { // first or second
+                    count = 0
+                } else if (i == arr.length - 2) { // before last
+                    count = i
+                } else if (i == arr.length - 1) { // last
+                    count = i - 1
                 }
+
+                break
             }
         }
 
