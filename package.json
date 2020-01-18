@@ -1,7 +1,7 @@
 {
     "name": "auto-change-counterpart",
     "displayName": "Auto Change Counterpart",
-    "description": "",
+    "description": "change deleted character counterpart with the new inserted one",
     "version": "0.0.1",
     "publisher": "ctf0",
     "repository": "",

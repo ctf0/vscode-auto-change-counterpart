@@ -28,6 +28,12 @@
 >
 > for example in step **#2** if you added any other character than the configured ones, it will be hard for the extension to keep track & no changes will be made.
 
+### Config
+
+- "toRight" means you want to change the counterpart to right hand on the text "cursor to end of line"
+- "toLeft" means you want to change the counterpart to left hand on the text "cursor to start of line"
+- "bi" search in both ways "the whole line"
+
 ### Notes
 
 - same counterpart chars ex.(`,',") have to be either`left`or`right` as we cant id if the change should be made to which direction
