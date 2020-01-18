@@ -1,4 +1,4 @@
-## How It Works
+## # How It Works
 
 0. original
 
@@ -24,16 +24,13 @@
 'some text'
 ```
 
-> keep in mind that the extension works in that **exact** order,
+> keep in mind that the extension works in that **exact** order, for example
 >
-> for example in step **#2** if you added any other character than the configured ones, it will be hard for the extension to keep track & no changes will be made.
+> - in step **#2** if you added any other character than the configured ones, extension wont be able to keep track of the removed character position & no changes will be made.
+> - if you selected a text and replaced it with one of the configured character, also wont work
+>
+> you have to first do a removal using `backspace/delete` then add the new character
 
-### Config
+### # Notes
 
-- "toRight" means you want to change the counterpart to right hand on the text "cursor to end of line"
-- "toLeft" means you want to change the counterpart to left hand on the text "cursor to start of line"
-- "bi" search in both ways "the whole line"
-
-### Notes
-
-- same counterpart chars ex.(`,',") have to be either`left`or`right` as we cant id if the change should be made to which direction
+- sadly no api to get the scope, so for now the changes have to be made on the same line

@@ -58,13 +58,12 @@ async function activate(context) {
                             let { range, rangeLength, text, rangeOffset } = change
 
                             // remove
-                            if (!text && rangeLength == 1) {
+                            if (!text && rangeLength == 1 && range.isSingleLine) {
                                 let deletedChar = getDocumentData(document).content.charAt(rangeOffset)
-                                let group = isSupported(deletedChar)
-                                // console.log('del', deletedChar, range, group)
+                                // console.log('del', deletedChar, range)
 
-                                if (group) {
-                                    saveCharOffset(rangeOffset, deletedChar, group)
+                                if (isSupported(deletedChar)) {
+                                    saveCharOffset(rangeOffset, deletedChar)
                                 }
                             }
 
@@ -137,23 +136,13 @@ function getDocumentData(document) {
 
 /* Char List --------------------------------------------------------------------- */
 function isSupported(char) {
-    let res = null
-
-    for (const item of charsList) {
-        if (Object.keys(item.chars).includes(char)) {
-            res = item
-            break
-        }
-    }
-
-    return res
+    return Object.keys(config.list).includes(char)
 }
 
-function saveCharOffset(offset, char, group) {
+function saveCharOffset(offset, char) {
     return prevRemoved.push({
         offset: offset,
-        char: char,
-        group: group
+        char: char
     })
 }
 
@@ -172,8 +161,8 @@ function removeCharOffset(offset) {
 /* replace --------------------------------------------------------------------- */
 async function makeReplacement(editor, change, deletedChar, range, lineText) {
     let { text } = change
-    let { char, group } = deletedChar
-    let { chars } = group
+    let { char } = deletedChar
+    let chars = config.list
     let toReplace = chars[char]
     let replaceWith = chars[text]
     let replaceDone = false
