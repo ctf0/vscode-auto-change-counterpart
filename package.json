@@ -1,0 +1,76 @@
+{
+    "name": "auto-change-counterpart",
+    "displayName": "Auto Change Counterpart",
+    "description": "",
+    "version": "0.0.1",
+    "publisher": "ctf0",
+    "repository": "",
+    "engines": {
+        "vscode": "^1.41.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "*"
+    ],
+    "main": "./extension.js",
+    "contributes": {
+        "configuration": {
+            "title": "Auto Change Counterpart",
+            "properties": {
+                "auto-change-counterpart.list": {
+                    "type": "array",
+                    "default": [
+                        {
+                            "direction": "toLeft",
+                            "chars": {
+                                ")": "(",
+                                "}": "{",
+                                "]": "["
+                            }
+                        },
+                        {
+                            "direction": "toRight",
+                            "chars": {
+                                "(": ")",
+                                "{": "}",
+                                "[": "]"
+                            }
+                        },
+                        {
+                            "direction": "bi",
+                            "chars": {
+                                "'": "'",
+                                "\"": "\"",
+                                "`": "`",
+                                "~": "~",
+                                "/": "/",
+                                "\\": "\\"
+                            }
+                        }
+                    ],
+                    "description": "characters list and their counter parts (single chars only)"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "test": "node ./test/runTest.js"
+    },
+    "devDependencies": {
+        "@types/glob": "^7.1.1",
+        "@types/mocha": "^5.2.7",
+        "@types/node": "^12.11.7",
+        "@types/vscode": "^1.41.0",
+        "eslint": "^6.6.0",
+        "glob": "^7.1.5",
+        "mocha": "^6.2.2",
+        "typescript": "^3.6.4",
+        "vscode-test": "^1.2.2"
+    },
+    "dependencies": {
+        "escape-string-regexp": "^2.0.0",
+        "lodash.debounce": "^4.0.8"
+    }
+}
