@@ -2,7 +2,7 @@
     "name": "auto-change-counterpart",
     "displayName": "Auto Change Counterpart",
     "description": "auto change deleted character counterpart with the new inserted one",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "publisher": "ctf0",
     "repository": "https://github.com/ctf0/vscode-auto-change-counterpart",
     "engines": {
@@ -20,28 +20,36 @@
             "title": "Auto Change Counterpart",
             "properties": {
                 "auto-change-counterpart.list": {
-                    "type": "object",
-                    "default": {
-                        ")": "(",
-                        "}": "{",
-                        "]": "[",
-                        "(": ")",
-                        "{": "}",
-                        "[": "]",
-                        "'": "'",
-                        "\"": "\"",
-                        "`": "`",
-                        "~": "~",
-                        "!": "!",
-                        "#": "#",
-                        "-": "-",
-                        "+": "+",
-                        "=": "=",
-                        "_": "_",
-                        "*": "*",
-                        "/": "/",
-                        "\\": "\\"
-                    },
+                    "type": "array",
+                    "default": [
+                        {
+                            "direction": "toLeft",
+                            "chars": {
+                                ")": "(",
+                                "}": "{",
+                                "]": "["
+                            }
+                        },
+                        {
+                            "direction": "toRight",
+                            "chars": {
+                                "(": ")",
+                                "{": "}",
+                                "[": "]"
+                            }
+                        },
+                        {
+                            "direction": "bi",
+                            "chars": {
+                                "'": "'",
+                                "\"": "\"",
+                                "`": "`",
+                                "~": "~",
+                                "/": "/",
+                                "\\": "\\"
+                            }
+                        }
+                    ],
                     "description": "characters list and their counter parts (single chars only)"
                 }
             }

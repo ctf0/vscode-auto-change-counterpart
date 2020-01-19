@@ -31,6 +31,12 @@
 >
 > you have to first do a removal using `backspace/delete` then add the new character
 
+### # Config
+
+- "toRight" means you want to change the counterpart to right hand on the text "cursor to end of line"
+- "toLeft" means you want to change the counterpart to left hand on the text "cursor to start of line"
+- "bi" search in both ways "the whole line"
+
 ### # Notes
 
 - sadly no api to get the scope, so for now the changes have to be made on the same line
