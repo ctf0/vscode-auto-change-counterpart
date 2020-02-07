@@ -20,37 +20,19 @@
             "title": "Auto Change Counterpart",
             "properties": {
                 "auto-change-counterpart.list": {
-                    "type": "array",
-                    "default": [
-                        {
-                            "direction": "toLeft",
-                            "chars": {
-                                ")": "(",
-                                "}": "{",
-                                "]": "["
-                            }
-                        },
-                        {
-                            "direction": "toRight",
-                            "chars": {
-                                "(": ")",
-                                "{": "}",
-                                "[": "]"
-                            }
-                        },
-                        {
-                            "direction": "bi",
-                            "chars": {
-                                "'": "'",
-                                "\"": "\"",
-                                "`": "`",
-                                "~": "~",
-                                "/": "/",
-                                "\\": "\\"
-                            }
-                        }
-                    ],
-                    "description": "characters list and their counter parts (single chars only)"
+                    "type": "object",
+                    "default": {
+                        "(": ")",
+                        "{": "}",
+                        "[": "]",
+                        "'": "'",
+                        "\"": "\"",
+                        "`": "`",
+                        "~": "~",
+                        "/": "/",
+                        "\\": "\\"
+                    },
+                    "markdownDescription": "characters list and their counter parts (single chars only)"
                 }
             }
         }

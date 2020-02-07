@@ -5,13 +5,17 @@ const escapeStringRegexp = require('escape-string-regexp')
 
 let config = {}
 let charsList = []
+let open = []
+let close = []
 let visibleTextEditors = []
 let prevRemoved = []
+let oldConfig = null
 
 /**
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
+    oldConfig = vscode.workspace.getConfiguration('editor').get('autoClosingBrackets')
     await readConfig()
 
     // config
@@ -48,53 +52,75 @@ async function activate(context) {
 
                     if (!editor) return
 
-                    let { document: aDocument } = editor
+                    let { document: aDocument, selections } = editor
                     let { document, contentChanges } = e
                     let added = false
 
-                    if (aDocument == document && contentChanges.length) {
-                        for (let i = 0; i < contentChanges.length; i++) {
-                            let change = contentChanges[i]
-                            let { range, rangeLength, text, rangeOffset } = change
+                    if (aDocument == document && contentChanges.length && selections.length == 1) {
+                        let change = contentChanges[contentChanges.length - 1]
+                        let { range, rangeLength, text, rangeOffset } = change
 
-                            // remove
-                            if (!text && rangeLength == 1) {
-                                let deletedChar = getDocumentData(document).content.charAt(rangeOffset)
-                                let group = isSupported(deletedChar)
-                                // console.log('del', deletedChar, range, group)
+                        // remove
+                        if (!text && rangeLength == 1) {
+                            let deletedChar = getDocumentData(document).content.charAt(rangeOffset)
+                            let direction = isSupported(deletedChar)
+                            // console.log('del', deletedChar, range, direction)
 
-                                if (group) {
-                                    saveCharOffset(rangeOffset, deletedChar, group)
+                            if (direction) {
+                                saveCharOffset(rangeOffset, deletedChar, direction)
+
+                                if (open.includes(deletedChar)) {
+                                    vscode.workspace.getConfiguration().update('editor.autoClosingBrackets', 'never', false)
                                 }
                             }
+                        }
 
-                            // replace
-                            if (text) {
-                                added = true
+                        // replace
+                        if (text) {
+                            await vscode.workspace.getConfiguration().update('editor.autoClosingBrackets', oldConfig, false)
+                            added = true
 
-                                if (text.length == 1 && prevRemoved.length) {
-                                    let deletedChar = getCharByOffset(rangeOffset)
-                                    // console.log('add', text, deletedChar, range)
+                            if (text.length == 1 && prevRemoved.length) {
+                                let deletedCharInfo = getCharByOffset(rangeOffset)
+                                // console.log('add', text, deletedCharInfo, range)
 
-                                    if (deletedChar) {
-                                        let { group } = deletedChar
-                                        let isLeft = group.direction == 'toLeft'
-                                        let isRight = group.direction == 'toRight'
+                                if (deletedCharInfo) {
+                                    let { direction, char } = deletedCharInfo
 
-                                        range = new vscode.Range(
-                                            range.start.line,
-                                            isRight ? range.start.character + 1 : 0,
-                                            range.start.line,
-                                            isLeft ? range.start.character : document.lineAt(range.start.line).text.length
-                                        )
+                                    let { start } = range
+                                    let { line, character } = start
 
-                                        if (!range.isEmpty) {
-                                            await makeReplacement(editor, change, deletedChar, range)
-                                        }
+                                    switch (direction) {
+                                        case 'toLeft':
+                                            range = new vscode.Range(
+                                                0,
+                                                0,
+                                                line,
+                                                character
+                                            )
+                                            break
+                                        case 'toRight':
+                                            range = new vscode.Range(
+                                                line,
+                                                character,
+                                                document.lineCount + 1,
+                                                0
+                                            )
+                                            break
+                                        case 'bi':
+                                            range = new vscode.Range(
+                                                line,
+                                                0,
+                                                line,
+                                                document.lineAt(line).text.length
+                                            )
+                                            break
                                     }
 
-                                    removeCharOffset(rangeOffset)
+                                    await makeReplacement(editor, change, deletedCharInfo, document.validateRange(range))
                                 }
+
+                                removeCharOffset(rangeOffset)
                             }
                         }
 
@@ -140,23 +166,28 @@ function getDocumentData(document) {
 
 /* Char List --------------------------------------------------------------------- */
 function isSupported(char) {
-    let res = null
+    let res = open.includes(char)
+        ? 'toRight'
+        : close.includes(char)
+            ? 'toLeft'
+            : false
 
-    for (const item of charsList) {
-        if (Object.keys(item.chars).includes(char)) {
-            res = item
-            break
-        }
+    if (charsList[char] == char) {
+        res = 'bi'
+    }
+
+    if (res) {
+        return res
     }
 
     return res
 }
 
-function saveCharOffset(offset, char, group) {
+function saveCharOffset(offset, char, direction) {
     return prevRemoved.push({
         offset: offset,
         char: char,
-        group: group
+        direction: direction
     })
 }
 
@@ -175,107 +206,123 @@ function removeCharOffset(offset) {
 /* replace --------------------------------------------------------------------- */
 async function makeReplacement(editor, change, deletedChar, range) {
     let { document } = editor
+    let { end, start } = range
     let { text, rangeOffset } = change
-    let { char, group } = deletedChar
-    let { direction, chars } = group
-    let toReplace = chars[char]
-    let replaceWith = chars[text]
-    let currentText = document.getText(range)
-    let replaceDone = false
+    let { char, direction } = deletedChar
+    let isLeft = direction == 'toLeft'
 
-    let moveBy
-    let res
+    let toReplace = charsList[char] || open.find((k) => charsList[k] === char)
+    let replaceWith = charsList[text] || open.find((k) => charsList[k] === text)
+    let regex = `${escapeStringRegexp(char)}|${escapeStringRegexp(toReplace)}`
+    let oldTxt
+    let offset
+    let pos
 
     if (direction == 'bi') {
-        moveBy = await getCharDiff(currentText, toReplace, replaceWith, direction)
-        res = currentText
+        regex = `${escapeStringRegexp(char)}|${escapeStringRegexp(replaceWith)}`
+        oldTxt = document.getText(range)
+
+        offset = await getCharOffsetBi(oldTxt, replaceWith, regex)
+        pos = document.positionAt(document.offsetAt(start) + offset)
     } else {
-        let isLeft = direction == 'toLeft'
-        let lineLength = currentText.length
-        let lineOldText = getDocumentData(document)
+        regex = `${escapeStringRegexp(char)}|${escapeStringRegexp(toReplace)}`
+        oldTxt = getDocumentData(document)
             .content
             .substr(
-                isLeft ? rangeOffset - lineLength : rangeOffset,
-                lineLength + 1
+                isLeft ? 0 : rangeOffset,
+                isLeft ? rangeOffset : document.offsetAt(end)
             )
 
-        moveBy = await getCharDiff(lineOldText, toReplace, char, direction)
-        res = isLeft ? lineOldText.slice(0, -1) : lineOldText.substr(1)
+        offset = isLeft
+            ? await getCharOffsetLeft(oldTxt, regex, toReplace)
+            : await getCharOffsetRight(oldTxt, regex, char)
+
+        pos = isLeft
+            ? document.positionAt(offset)
+            : document.positionAt(document.offsetAt(start) + offset)
     }
 
-    // console.log(moveBy)
+    // test replacement
+    // editor.selection = new vscode.Selection(pos, pos.with(pos.line, pos.character + 1))
 
     await editor.edit(
         (edit) => edit.replace(
-            range,
-            res.replace(new RegExp(escapeStringRegexp(toReplace), 'g'), (match) => {
-                if (moveBy == 0 && !replaceDone) {
-                    replaceDone = true
-
-                    return replaceWith
-                } else {
-                    if (!replaceDone) {
-                        moveBy--
-                    }
-
-                    return match
-                }
-            })
+            new vscode.Range(pos, pos.with(pos.line, pos.character + 1)),
+            replaceWith
         ),
         { undoStopBefore: true, undoStopAfter: true }
     )
 }
 
-async function getCharDiff(txt, lookFor, replacement, direction) {
+async function getCharOffsetRight(txt, regex, open) {
     return new Promise((resolve) => {
-        let count = 0
-        let other = 0
-        let me = 0
-        let regex = `${escapeStringRegexp(lookFor)}|${escapeStringRegexp(replacement)}`
+        let pos = 0
+        let isOpen = 0
 
-        if (direction == 'toLeft') {
-            txt.replace(new RegExp(regex, 'g'), (match) => {
-                match == lookFor
-                    ? other++
-                    : me++
+        txt.replace(new RegExp(regex, 'g'), (match, offset) => {
+            match === open
+                ? isOpen++
+                : isOpen--
+
+            if (isOpen == 0 && pos == 0) {
+                pos = offset
+            }
+        })
+
+        resolve(pos)
+    })
+}
+
+async function getCharOffsetLeft(txt, regex, open) {
+    return new Promise((resolve) => {
+        let pos = []
+
+        txt.replace(new RegExp(regex, 'g'), (match, offset) => {
+            if (match == open) {
+                pos.push(offset)
+            } else {
+                pos.pop()
+            }
+        })
+
+        resolve(pos[pos.length - 1])
+    })
+}
+
+async function getCharOffsetBi(txt, replacement, regex) {
+    return new Promise((resolve) => {
+        let res = {}
+        let arr = []
+        txt.replace(new RegExp(regex, 'g'), (match, offset) => {
+            arr.push({
+                match: match,
+                offset: offset
             })
+        })
 
-            count = other - me
-        } else if (direction == 'toRight') {
-            txt.replace(new RegExp(regex, 'g'), (match) => {
-                match == replacement
-                    ? me++
-                    : other++
-            })
+        let first = arr[0]
+        let last = arr[arr.length - 1]
+        let me = arr.findIndex((e) => e.match == replacement)
+        let direction = me > arr.length / 2
+            ? 'toLeft'
+            : 'toRight'
 
-            if (me == 1 && other >= 1) { // have more or same amount of other ex.(....))
-                count = 0
-            }
-
-            if (me == other) { // the same amount ex.((...)), so we probably on the edge
-                count = other - 1
-            }
-        } else {
-            let arr = txt.match(new RegExp(regex, 'g'))
-
-            for (let i = 0; i < arr.length; i++) {
-                const me = arr[i]
-
-                if (me == replacement) {
-                    if (i <= 1) { // first or second
-                        count = 0
-                    } else if (i == arr.length - 2) { // before last
-                        count = i
-                    } else if (i == arr.length - 1) { // last
-                        count = i - 1
-                    }
-
-                    break
-                }
-            }
+        if (arr[me] == first) { // am first, get last
+            resolve(last.offset)
+        } else if (arr[me] == last) { // am last, get first
+            resolve(first.offset)
         }
 
-        resolve(count)
+        switch (direction) {
+            case 'toLeft':
+                res = arr[me - 1]
+                break
+            case 'toRight':
+                res = arr[me + 1]
+                break
+        }
+
+        resolve(res.offset)
     })
 }
 
@@ -283,6 +330,8 @@ async function getCharDiff(txt, lookFor, replacement, direction) {
 async function readConfig() {
     config = await vscode.workspace.getConfiguration(PACKAGE_NAME)
     charsList = config.list
+    open = Object.keys(charsList)
+    close = Object.values(charsList)
 }
 
 function deactivate() { }

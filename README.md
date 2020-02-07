@@ -1,3 +1,7 @@
+# Auto Change Counterpart
+
+i made this because i wanted to change between **braces,quotes,etc..** as fluent as possible without needing to remember a shortcut that runs a command to do so
+
 ## # How It Works
 
 0. original
@@ -31,12 +35,7 @@
 >
 > you have to first do a removal using `backspace/delete` then add the new character
 
-### # Config
+## Notes
 
-- "toRight" means you want to change the counterpart to right hand on the text "cursor to end of line"
-- "toLeft" means you want to change the counterpart to left hand on the text "cursor to start of line"
-- "bi" search in both ways "the whole line"
-
-### # Notes
-
-- sadly no api to get the scope, so for now the changes have to be made on the same line
+- bi direction characters ex.`",',~,etc..'` search on the same line only
+- changes are applied for single selection only to avoid unexpected behavior
