@@ -2,6 +2,7 @@ const vscode = require('vscode')
 const PACKAGE_NAME = 'auto-change-counterpart'
 const debounce = require('lodash.debounce')
 const escapeStringRegexp = require('escape-string-regexp')
+const Prism = require('prismjs')
 
 let config = {}
 let charsList = []
@@ -58,21 +59,21 @@ async function activate(context) {
 
                     if (aDocument == document && contentChanges.length && selections.length == 1) {
                         let change = contentChanges[contentChanges.length - 1]
-                        let { range, rangeLength, text, rangeOffset } = change
+                        let { rangeLength, text, rangeOffset } = change
+
+                        // select & change
+                        // open replace wont work as we should listen to type not changes
+                        if (text && text.length == 1 && close.includes(text)) {
+                            let replacedChar = getDocumentData(document).content.charAt(rangeOffset)
+
+                            if (replacedChar != text) {
+                                saveRemoved(change, document, replacedChar)
+                            }
+                        }
 
                         // remove
                         if (!text && rangeLength == 1) {
-                            let deletedChar = getDocumentData(document).content.charAt(rangeOffset)
-                            let direction = isSupported(deletedChar)
-                            // console.log('del', deletedChar, range, direction)
-
-                            if (direction) {
-                                saveCharOffset(rangeOffset, deletedChar, direction)
-
-                                if (open.includes(deletedChar)) {
-                                    vscode.workspace.getConfiguration().update('editor.autoClosingBrackets', 'never', false)
-                                }
-                            }
+                            saveRemoved(change, document)
                         }
 
                         // replace
@@ -80,48 +81,7 @@ async function activate(context) {
                             await vscode.workspace.getConfiguration().update('editor.autoClosingBrackets', oldConfig, false)
                             added = true
 
-                            if (text.length == 1 && prevRemoved.length) {
-                                let deletedCharInfo = getCharByOffset(rangeOffset)
-                                // console.log('add', text, deletedCharInfo, range)
-
-                                if (deletedCharInfo) {
-                                    let { direction, char } = deletedCharInfo
-
-                                    let { start } = range
-                                    let { line, character } = start
-
-                                    switch (direction) {
-                                        case 'toLeft':
-                                            range = new vscode.Range(
-                                                0,
-                                                0,
-                                                line,
-                                                character
-                                            )
-                                            break
-                                        case 'toRight':
-                                            range = new vscode.Range(
-                                                line,
-                                                character,
-                                                document.lineCount + 1,
-                                                0
-                                            )
-                                            break
-                                        case 'bi':
-                                            range = new vscode.Range(
-                                                line,
-                                                0,
-                                                line,
-                                                document.lineAt(line).text.length
-                                            )
-                                            break
-                                    }
-
-                                    await makeReplacement(editor, change, deletedCharInfo, document.validateRange(range))
-                                }
-
-                                removeCharOffset(rangeOffset)
-                            }
+                            resolveReplace(change, editor)
                         }
 
                         if (added) {
@@ -132,6 +92,69 @@ async function activate(context) {
             }
         )
     )
+}
+
+function saveRemoved(change, document, deletedChar = null) {
+    let { rangeOffset } = change
+
+    deletedChar = deletedChar || getDocumentData(document).content.charAt(rangeOffset)
+    let direction = isSupported(deletedChar)
+    // console.log('del', deletedChar, range, direction)
+
+    if (direction) {
+        saveCharOffset(rangeOffset, deletedChar, direction)
+
+        if (open.includes(deletedChar)) {
+            vscode.workspace.getConfiguration().update('editor.autoClosingBrackets', 'never', false)
+        }
+    }
+}
+
+async function resolveReplace(change, editor) {
+    let { document } = editor
+    let { range, text, rangeOffset } = change
+
+    if (text.length == 1 && prevRemoved.length) {
+        let deletedCharInfo = getCharByOffset(rangeOffset)
+        // console.log('add', text, deletedCharInfo, range)
+
+        if (deletedCharInfo) {
+            let { direction } = deletedCharInfo
+            let { start } = range
+            let { line, character } = start
+
+            switch (direction) {
+                case 'toLeft':
+                    range = new vscode.Range(
+                        0,
+                        0,
+                        line,
+                        character
+                    )
+                    break
+                case 'toRight':
+                    range = new vscode.Range(
+                        line,
+                        character,
+                        document.lineCount + 1,
+                        0
+                    )
+                    break
+                case 'bi':
+                    range = new vscode.Range(
+                        line,
+                        0,
+                        line,
+                        document.lineAt(line).text.length
+                    )
+                    break
+            }
+
+            await makeReplacement(editor, change, deletedCharInfo, document.validateRange(range))
+        }
+
+        removeCharOffset(rangeOffset)
+    }
 }
 
 /* Doc List --------------------------------------------------------------------- */
@@ -219,13 +242,22 @@ async function makeReplacement(editor, change, deletedChar, range) {
     let pos
 
     if (direction == 'bi') {
-        regex = `${escapeStringRegexp(char)}|${escapeStringRegexp(replaceWith)}`
-        oldTxt = document.getText(range)
+        let lineStart = document.offsetAt(start)
+        let lineEnd = document.offsetAt(end)
+        let cursorOffset = rangeOffset + 1 - lineStart
 
-        offset = await getCharOffsetBi(oldTxt, replaceWith, regex)
-        pos = document.positionAt(document.offsetAt(start) + offset)
+        oldTxt = getDocumentData(document)
+            .content
+            .substr(lineStart, lineEnd - lineStart)
+
+        offset = await getCharOffsetBi(oldTxt, document.languageId, cursorOffset, char)
+
+        if (!offset) {
+            return false
+        }
+
+        pos = document.positionAt(lineStart + offset)
     } else {
-        regex = `${escapeStringRegexp(char)}|${escapeStringRegexp(toReplace)}`
         oldTxt = getDocumentData(document)
             .content
             .substr(
@@ -243,7 +275,7 @@ async function makeReplacement(editor, change, deletedChar, range) {
     }
 
     // test replacement
-    // editor.selection = new vscode.Selection(pos, pos.with(pos.line, pos.character + 1))
+    // editor.selection = await new vscode.Selection(pos, pos.with(pos.line, pos.character + 1))
 
     await editor.edit(
         (edit) => edit.replace(
@@ -289,40 +321,46 @@ async function getCharOffsetLeft(txt, regex, open) {
     })
 }
 
-async function getCharOffsetBi(txt, replacement, regex) {
+async function getCharOffsetBi(txt, languageId, cursorOffset, char) {
     return new Promise((resolve) => {
-        let res = {}
-        let arr = []
-        txt.replace(new RegExp(regex, 'g'), (match, offset) => {
-            arr.push({
-                match: match,
-                offset: offset
-            })
-        })
+        let lang = Prism.languages[languageId] || Prism.languages['javascript']
+        let tokens = Prism.tokenize(txt, lang)
+        let end = 0
+        let found = null
 
-        let first = arr[0]
-        let last = arr[arr.length - 1]
-        let me = arr.findIndex((e) => e.match == replacement)
-        let direction = me > arr.length / 2
-            ? 'toLeft'
-            : 'toRight'
+        for (let i = 0; i < tokens.length; i++) {
+            const el = tokens[i]
+            let len = el.length
+            let start = end
+            end += len
 
-        if (arr[me] == first) { // am first, get last
-            resolve(last.offset)
-        } else if (arr[me] == last) { // am last, get first
-            resolve(first.offset)
+            if (end >= cursorOffset) {
+                let atStart = start == cursorOffset - 1
+                let atEnd = end == cursorOffset
+
+                let regex = atStart
+                    ? new RegExp(`${escapeStringRegexp(char)}$`) // get last
+                    : atEnd
+                        ? new RegExp(`^${escapeStringRegexp(char)}`) // get first
+                        : new RegExp(escapeStringRegexp(char), 'g') // todo
+
+                let cont = typeof el == 'object' ? el.content.toString() : el
+
+                // for some fucken reason the regex matches
+                // every odd time ex.1st,3rd,5th,etc...
+                cont.replace(regex, (match, index) => {
+                    found = atStart
+                        ? cursorOffset + index - 1
+                        : atEnd
+                            ? cursorOffset - len
+                            : 0
+                })
+
+                break
+            }
         }
 
-        switch (direction) {
-            case 'toLeft':
-                res = arr[me - 1]
-                break
-            case 'toRight':
-                res = arr[me + 1]
-                break
-        }
-
-        resolve(res.offset)
+        resolve(found)
     })
 }
 

@@ -2,7 +2,7 @@
     "name": "auto-change-counterpart",
     "displayName": "Auto Change Counterpart",
     "description": "auto change deleted character counterpart with the new inserted one",
-    "version": "0.0.2",
+    "version": "0.0.1",
     "publisher": "ctf0",
     "repository": "https://github.com/ctf0/vscode-auto-change-counterpart",
     "engines": {
@@ -30,7 +30,8 @@
                         "`": "`",
                         "~": "~",
                         "/": "/",
-                        "\\": "\\"
+                        "\\": "\\",
+                        "#": "#"
                     },
                     "markdownDescription": "characters list and their counter parts (single chars only)"
                 }
@@ -53,6 +54,7 @@
     },
     "dependencies": {
         "escape-string-regexp": "^2.0.0",
-        "lodash.debounce": "^4.0.8"
+        "lodash.debounce": "^4.0.8",
+        "prismjs": "^1.19.0"
     }
 }
