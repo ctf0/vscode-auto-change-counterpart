@@ -37,5 +37,5 @@ i made this because i wanted to change between **braces,quotes,etc..** as fluent
 
 ## Notes
 
-- bi direction characters ex.`",',~,etc..'` search on the same line only
+- bi direction characters ex.`", ', ~, etc..'` search on the same line only
 - changes are applied for single selection only to avoid unexpected behavior

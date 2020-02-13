@@ -57,19 +57,23 @@ async function activate(context) {
                     let { document, contentChanges } = e
                     let added = false
 
-                    if (aDocument == document && contentChanges.length && selections.length == 1) {
+                    if (
+                        aDocument == document &&
+                        contentChanges.length &&
+                        selections.length == 1
+                    ) {
                         let change = contentChanges[contentChanges.length - 1]
                         let { rangeLength, text, rangeOffset } = change
 
                         // select & change
                         // open replace wont work as we should listen to type not changes
-                        if (text && text.length == 1 && close.includes(text)) {
-                            let replacedChar = getDocumentData(document).content.charAt(rangeOffset)
+                        // if (text && text.length == 1 && close.includes(text)) {
+                        //     let replacedChar = getDocumentData(document).content.charAt(rangeOffset)
 
-                            if (replacedChar != text) {
-                                saveRemoved(change, document, replacedChar)
-                            }
-                        }
+                        //     if (replacedChar != text) {
+                        //         saveRemoved(change, document, replacedChar)
+                        //     }
+                        // }
 
                         // remove
                         if (!text && rangeLength == 1) {
@@ -77,7 +81,7 @@ async function activate(context) {
                         }
 
                         // replace
-                        if (text) {
+                        if (text && text.length == 1 && prevRemoved.length) {
                             await vscode.workspace.getConfiguration().update('editor.autoClosingBrackets', oldConfig, false)
                             added = true
 
@@ -113,48 +117,45 @@ function saveRemoved(change, document, deletedChar = null) {
 async function resolveReplace(change, editor) {
     let { document } = editor
     let { range, text, rangeOffset } = change
+    let deletedCharInfo = getCharByOffset(rangeOffset)
+    // console.log('add', text, deletedCharInfo, range)
 
-    if (text.length == 1 && prevRemoved.length) {
-        let deletedCharInfo = getCharByOffset(rangeOffset)
-        // console.log('add', text, deletedCharInfo, range)
+    if (deletedCharInfo) {
+        let { direction } = deletedCharInfo
+        let { start } = range
+        let { line, character } = start
 
-        if (deletedCharInfo) {
-            let { direction } = deletedCharInfo
-            let { start } = range
-            let { line, character } = start
-
-            switch (direction) {
-                case 'toLeft':
-                    range = new vscode.Range(
-                        0,
-                        0,
-                        line,
-                        character
-                    )
-                    break
-                case 'toRight':
-                    range = new vscode.Range(
-                        line,
-                        character,
-                        document.lineCount + 1,
-                        0
-                    )
-                    break
-                case 'bi':
-                    range = new vscode.Range(
-                        line,
-                        0,
-                        line,
-                        document.lineAt(line).text.length
-                    )
-                    break
-            }
-
-            await makeReplacement(editor, change, deletedCharInfo, document.validateRange(range))
+        switch (direction) {
+            case 'toLeft':
+                range = new vscode.Range(
+                    0,
+                    0,
+                    line,
+                    character
+                )
+                break
+            case 'toRight':
+                range = new vscode.Range(
+                    line,
+                    character,
+                    document.lineCount + 1,
+                    0
+                )
+                break
+            case 'bi':
+                range = new vscode.Range(
+                    line,
+                    0,
+                    line,
+                    document.lineAt(line).text.length
+                )
+                break
         }
 
-        removeCharOffset(rangeOffset)
+        await makeReplacement(editor, change, deletedCharInfo, document.validateRange(range))
     }
+
+    removeCharOffset(rangeOffset)
 }
 
 /* Doc List --------------------------------------------------------------------- */
@@ -237,7 +238,7 @@ async function makeReplacement(editor, change, deletedChar, range) {
     let toReplace = charsList[char] || open.find((k) => charsList[k] === char)
     let replaceWith = charsList[text] || open.find((k) => charsList[k] === text)
     let regex = `${escapeStringRegexp(char)}|${escapeStringRegexp(toReplace)}`
-    let oldTxt
+    let oldTxt = getDocumentData(document).content
     let offset
     let pos
 
@@ -246,9 +247,7 @@ async function makeReplacement(editor, change, deletedChar, range) {
         let lineEnd = document.offsetAt(end)
         let cursorOffset = rangeOffset + 1 - lineStart
 
-        oldTxt = getDocumentData(document)
-            .content
-            .substr(lineStart, lineEnd - lineStart)
+        oldTxt = oldTxt.substr(lineStart, lineEnd - lineStart)
 
         offset = await getCharOffsetBi(oldTxt, document.languageId, cursorOffset, char)
 
@@ -258,12 +257,10 @@ async function makeReplacement(editor, change, deletedChar, range) {
 
         pos = document.positionAt(lineStart + offset)
     } else {
-        oldTxt = getDocumentData(document)
-            .content
-            .substr(
-                isLeft ? 0 : rangeOffset,
-                isLeft ? rangeOffset : document.offsetAt(end)
-            )
+        oldTxt = oldTxt.substr(
+            isLeft ? 0 : rangeOffset,
+            isLeft ? rangeOffset : document.offsetAt(end)
+        )
 
         offset = isLeft
             ? await getCharOffsetLeft(oldTxt, regex, toReplace)
